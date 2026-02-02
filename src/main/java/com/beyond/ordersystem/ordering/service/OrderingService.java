@@ -1,5 +1,6 @@
 package com.beyond.ordersystem.ordering.service;
 
+import com.beyond.ordersystem.common.service.SseAlarmService;
 import com.beyond.ordersystem.member.domain.Member;
 import com.beyond.ordersystem.member.repository.MemberRepository;
 import com.beyond.ordersystem.ordering.domain.OrderDetail;
@@ -26,12 +27,14 @@ public class OrderingService {
     private final OrderDetailRepository orderDetailRepository;
     private final ProductRepository productRepository;
     private final MemberRepository memberRepository;
+    private final SseAlarmService sseAlarmService;
 
-    public OrderingService(OrderingRepository orderingRepository, OrderDetailRepository orderDetailRepository, ProductRepository productRepository, MemberRepository memberRepository) {
+    public OrderingService(OrderingRepository orderingRepository, OrderDetailRepository orderDetailRepository, ProductRepository productRepository, MemberRepository memberRepository, SseAlarmService sseAlarmService) {
         this.orderingRepository = orderingRepository;
         this.orderDetailRepository = orderDetailRepository;
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
+        this.sseAlarmService = sseAlarmService;
     }
 
     public Long create( List<OrderCreateDto> orderCreateDtoList){
@@ -42,6 +45,11 @@ public class OrderingService {
                 .build();
         for (OrderCreateDto dto : orderCreateDtoList){
             Product product = productRepository.findById(dto.getProductId()).orElseThrow(()->new EntityNotFoundException("entity is not found"));
+
+            if (product.getStockQuantity()<dto.getProductCount()){
+                throw new IllegalArgumentException("재고가 부족합니다.");
+            }
+            product.updateStockQuantity(dto.getProductCount());
             OrderDetail orderDetail = OrderDetail.builder()
                     .ordering(ordering)
                     .product(product)
@@ -51,6 +59,9 @@ public class OrderingService {
         }
         orderingRepository.save(ordering);
 
+//        주문성공시 admin 유저에게 알림메시지 전송
+        String message = ordering.getId()+"번 주문이 들어왔습니다.";
+        sseAlarmService.sendMessage("admin@naver.com", email, message);
 
         return ordering.getId();
     }

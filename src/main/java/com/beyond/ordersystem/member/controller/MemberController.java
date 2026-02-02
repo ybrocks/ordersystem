@@ -55,12 +55,28 @@ public class MemberController {
     public ResponseEntity<?> login(@RequestBody MemberLoginReqDto dto){
         Member member = memberService.login(dto);
         String accessToken = jwtTokenProvider.createToken(member);
-//        refresh생성
+//        refresh생성 및 저장
+        String refreshToken = jwtTokenProvider.createRtToken(member);
+        MemberLoginResDto memberLoginResDto = MemberLoginResDto.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .build();
+        return ResponseEntity.status(HttpStatus.OK).body(memberLoginResDto);
+    }
+
+    @PostMapping("/refresh-at")
+    public ResponseEntity<?> refreshAt(@RequestBody RefreshTokenDto dto){
+//        rt검증(1.토큰자체검증 2.redis조회검증)
+        Member member = jwtTokenProvider.validateRt(dto.getRefreshToken());
+
+//        at신규생성
+        String accessToken = jwtTokenProvider.createToken(member);
+//        refresh생성 및 저장
+        String refreshToken = jwtTokenProvider.createRtToken(member);
         MemberLoginResDto memberLoginResDto = MemberLoginResDto.builder()
                 .accessToken(accessToken)
                 .refreshToken(null)
                 .build();
         return ResponseEntity.status(HttpStatus.OK).body(memberLoginResDto);
     }
-
 }

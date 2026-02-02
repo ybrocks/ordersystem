@@ -64,5 +64,4 @@ public class CommonExceptionHandler {
                 .build();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(dto);
     }
-
 }
