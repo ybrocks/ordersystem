@@ -3,6 +3,7 @@ package com.beyond.ordersystem.product.controller;
 import com.beyond.ordersystem.product.dtos.ProductCreateDto;
 import com.beyond.ordersystem.product.dtos.ProductResDto;
 import com.beyond.ordersystem.product.dtos.ProductSearchDto;
+import com.beyond.ordersystem.product.dtos.ProductUpdateDto;
 import com.beyond.ordersystem.product.service.ProductService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -42,4 +43,9 @@ public class ProductController {
         return ResponseEntity.status(HttpStatus.OK).body(productResDto);
     }
 
+    @PutMapping("/update/{id}")
+    public ResponseEntity<?> update(@PathVariable Long id, @ModelAttribute ProductUpdateDto dto) {
+        productService.update(id, dto);
+        return ResponseEntity.status(HttpStatus.OK).body(null);
+    }
 }

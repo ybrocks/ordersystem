@@ -7,16 +7,19 @@ import com.beyond.ordersystem.product.domain.Product;
 import com.beyond.ordersystem.product.dtos.ProductCreateDto;
 import com.beyond.ordersystem.product.dtos.ProductResDto;
 import com.beyond.ordersystem.product.dtos.ProductSearchDto;
+import com.beyond.ordersystem.product.dtos.ProductUpdateDto;
 import com.beyond.ordersystem.product.repository.ProductRepository;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,13 +39,15 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final MemberRepository memberRepository;
     private final S3Client s3Client;
+    private final RedisTemplate<String, String> redisTemplate;
     @Value("${aws.s3.bucket1}")
     private String bucket;
 
-    public ProductService(ProductRepository productRepository, MemberRepository memberRepository, S3Client s3Client) {
+    public ProductService(ProductRepository productRepository, MemberRepository memberRepository, S3Client s3Client, @Qualifier("stockInventory") RedisTemplate<String, String> redisTemplate) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
         this.s3Client = s3Client;
+        this.redisTemplate = redisTemplate;
     }
 
     public Long save(ProductCreateDto productCreateDto) {
@@ -64,6 +69,9 @@ public class ProductService {
             String imgUrl = s3Client.utilities().getUrl(a->a.bucket(bucket).key(fileName)).toExternalForm();
             product.updateProfileImageUrl(imgUrl);
         }
+
+//        동시성문제 해결을 위해 상품등록시 redis에 재고 세팅
+        redisTemplate.opsForValue().set(String.valueOf(product.getId()), String.valueOf(product.getStockQuantity()));
         return product.getId();
     }
 
@@ -97,5 +105,40 @@ public class ProductService {
         return ProductResDto.fromEntity(product);
     }
 
+    public void update(Long id, ProductUpdateDto dto){
+        Product product = productRepository.findById(id).orElseThrow(()->new EntityNotFoundException("상품정보없음"));
+        product.updateProduct(dto);
 
+        if (dto.getProductImage()!=null){
+//            이미지를 수정하는 경우 -> 삭제 후 추가
+//            기존 이미지 파일명으로 삭제
+            if (product.getImagePath()!=null){
+                String imgUrl = product.getImagePath();
+                String fileName = imgUrl.substring(imgUrl.lastIndexOf("/")+1);
+                s3Client.deleteObject(a->a.bucket(bucket).key(fileName));
+            }
+
+//            신규 이미지 등록
+            String newFileName = "product-"+product.getId()+"-"+dto.getProductImage().getOriginalFilename();
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(newFileName)
+                    .contentType(dto.getProductImage().getContentType())
+                    .build();
+            try {
+                s3Client.putObject(request, RequestBody.fromBytes(dto.getProductImage().getBytes()));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            String newImgUrl = s3Client.utilities().getUrl(a->a.bucket(bucket).key(newFileName)).toExternalForm();
+            product.updateProfileImageUrl(newImgUrl);
+        }else {
+//            이미지를 삭제하고자 하는 경우
+            if (product.getImagePath()!=null){
+                String imgUrl = product.getImagePath();
+                String fileName = imgUrl.substring(imgUrl.lastIndexOf("/")+1);
+                s3Client.deleteObject(a->a.bucket(bucket).key(fileName));
+            }
+        }
+    }
 }

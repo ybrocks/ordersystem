@@ -26,4 +26,10 @@ public class SseController {
         sseEmitter.send(SseEmitter.event().name("connect").data("연결완료"));
         return sseEmitter;
     }
+
+    @GetMapping("/disconnect")
+    public void disconnect() throws IOException {
+        String email = SecurityContextHolder.getContext().getAuthentication().getPrincipal().toString();
+        sseEmitterRegistry.removeEmitter(email);
+    }
 }
